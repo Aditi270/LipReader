@@ -4,6 +4,8 @@ import os
 os.environ.setdefault("TF_USE_LEGACY_KERAS", "1")
 
 # Import all of the dependencies
+import shutil
+import subprocess
 import streamlit as st
 import imageio 
 
@@ -118,8 +120,8 @@ if options:
     tabs = st.tabs(["Model view", "Prediction"])
 
     with tabs[0]:
-        st.subheader("What the model sees")
-        st.caption("Cropped mouth region over time (GIF).")
+        st.subheader("Video preview and model view")
+        st.caption("Preview the selected clip (when supported) and the cropped mouth-region input (GIF).")
 
         video, annotations = load_data(tf.convert_to_tensor(file_path))
 
@@ -130,8 +132,37 @@ if options:
         video_uint8 = tf.cast(((video - vmin) / denom) * 255.0, tf.uint8)
         video_uint8 = tf.squeeze(video_uint8, axis=-1)
 
-        imageio.mimsave("animation.gif", video_uint8.numpy(), fps=10)
-        st.image("animation.gif", use_container_width=False, width=420)
+        left, right = st.columns([1, 1], gap="large")
+
+        with left:
+            st.markdown("#### Video preview")
+            st.caption("Uses ffmpeg locally when available.")
+
+            ffmpeg = shutil.which("ffmpeg")
+            if ffmpeg:
+                preview_mp4 = os.path.join(os.path.dirname(__file__), "preview.mp4")
+                try:
+                    needs_render = (not os.path.isfile(preview_mp4)) or (
+                        os.path.getmtime(preview_mp4) < os.path.getmtime(file_path)
+                    )
+                    if needs_render:
+                        subprocess.run(
+                            [ffmpeg, "-y", "-i", file_path, "-vcodec", "libx264", "-acodec", "aac", preview_mp4],
+                            check=True,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                    with open(preview_mp4, "rb") as f:
+                        st.video(f.read())
+                except Exception:
+                    st.info("Preview unavailable for this environment. See the model-view GIF on the right.")
+            else:
+                st.info("Preview unavailable (ffmpeg not found). See the model-view GIF on the right.")
+
+        with right:
+            st.markdown("#### Model view (mouth ROI)")
+            imageio.mimsave("animation.gif", video_uint8.numpy(), fps=10)
+            st.image("animation.gif", use_container_width=False, width=420)
 
         if show_debug:
             st.write(
