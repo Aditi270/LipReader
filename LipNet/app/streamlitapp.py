@@ -52,56 +52,117 @@ def ensure_assets() -> None:
 # Set the layout to the streamlit app as wide 
 st.set_page_config(page_title="LipReader", layout="wide")
 
-# Setup the sidebar
-with st.sidebar: 
-    st.image('https://www.onepointltd.com/wp-content/uploads/2020/03/inno2.png')
-    st.title('LipReader')
-    st.info('This application is originally developed from the LipNet deep learning model.')
+# Global styling (subtle, modern defaults)
+st.markdown(
+    """
+<style>
+  .block-container { padding-top: 1.25rem; padding-bottom: 2.5rem; }
+  [data-testid="stSidebar"] { padding-top: 1.25rem; }
+  .lipreader-hero h1 { margin-bottom: 0.25rem; }
+  .lipreader-muted { color: rgba(255,255,255,0.70); }
+  @media (prefers-color-scheme: light) {
+    .lipreader-muted { color: rgba(0,0,0,0.60); }
+  }
+</style>
+""",
+    unsafe_allow_html=True,
+)
 
-    st.markdown("### Open the app link")
-    st.markdown("- **Local link (this PC)**: [http://127.0.0.1:8501](http://127.0.0.1:8501)")
+# Sidebar
+with st.sidebar:
+    st.markdown("## LipReader")
+    st.caption("A lip-reading demo based on LipNet-style architectures.")
 
-st.title('LipReader') 
-st.markdown("**Link:** [http://127.0.0.1:8501](http://127.0.0.1:8501)")
+    with st.expander("About", expanded=False):
+        st.write(
+            "Select a sample video and LipReader will show the model input (cropped mouth ROI) "
+            "and decode the predicted text."
+        )
+
+    show_debug = st.toggle("Show debug output", value=False)
+
+
+# Hero header
+st.markdown(
+    """
+<div class="lipreader-hero">
+  <h1>LipReader</h1>
+  <div class="lipreader-muted">Upload-free demo using a prepackaged dataset and pretrained weights.</div>
+</div>
+""",
+    unsafe_allow_html=True,
+)
+st.divider()
 
 ensure_assets()
 
 # Generating a list of options or videos 
-options = os.listdir(os.path.join('..', 'data', 's1'))
-selected_video = st.selectbox('Choose video', options)
+options = sorted(os.listdir(os.path.join("..", "data", "s1")))
+selected_video = st.selectbox(
+    "Choose a sample video",
+    options,
+    index=0 if options else None,
+    help="These are sample clips from the bundled dataset.",
+)
 
-# Generate two columns 
-col1, col2 = st.columns(2)
+top_row = st.columns([2, 1])
+with top_row[0]:
+    st.caption(f"Selected: `{selected_video}`" if selected_video else "No samples found.")
+with top_row[1]:
+    run_inference = st.button("Run inference", type="primary", use_container_width=True)
 
 if options: 
 
-    # Rendering the video 
-    with col1: 
-        st.info('Input video (preview)')
-        file_path = os.path.join('..','data','s1', selected_video)
-        st.caption("On some deployments, ffmpeg is unavailable, so we show the model-view GIF instead.")
+    file_path = os.path.join("..", "data", "s1", selected_video)
 
+    tabs = st.tabs(["Model view", "Prediction"])
 
-    with col2: 
-        st.info('This is all the machine learning model sees when making a prediction')
+    with tabs[0]:
+        st.subheader("What the model sees")
+        st.caption("Cropped mouth region over time (GIF).")
+
         video, annotations = load_data(tf.convert_to_tensor(file_path))
+
         # `video` is normalized float32 with shape (T, H, W, 1); convert for GIF writer.
         vmin = tf.reduce_min(video)
         vmax = tf.reduce_max(video)
         denom = tf.where(tf.equal(vmax - vmin, 0), tf.ones_like(vmax - vmin), vmax - vmin)
         video_uint8 = tf.cast(((video - vmin) / denom) * 255.0, tf.uint8)
         video_uint8 = tf.squeeze(video_uint8, axis=-1)
-        imageio.mimsave('animation.gif', video_uint8.numpy(), fps=10)
-        st.image('animation.gif', width=400)
 
-        st.info('This is the output of the machine learning model as tokens')
-        model = load_model()
-        yhat = model.predict(tf.expand_dims(video, axis=0))
-        decoder = tf.keras.backend.ctc_decode(yhat, [75], greedy=True)[0][0].numpy()
-        st.text(decoder)
+        imageio.mimsave("animation.gif", video_uint8.numpy(), fps=10)
+        st.image("animation.gif", use_container_width=False, width=420)
 
-        # Convert prediction to text
-        st.info('Decode the raw tokens into words')
-        converted_prediction = tf.strings.reduce_join(num_to_char(decoder)).numpy().decode('utf-8')
-        st.text(converted_prediction)
+        if show_debug:
+            st.write(
+                {
+                    "video_shape": tuple(video.shape),
+                    "video_dtype": str(video.dtype),
+                    "alignment_len": int(tf.shape(annotations)[0].numpy()),
+                }
+            )
+
+    with tabs[1]:
+        st.subheader("Prediction")
+        st.caption("Click **Run inference** to decode the selected sample.")
+
+        if run_inference:
+            with st.spinner("Running the model..."):
+                model = load_model()
+                yhat = model.predict(tf.expand_dims(video, axis=0), verbose=0)
+                decoder = tf.keras.backend.ctc_decode(yhat, [75], greedy=True)[0][0].numpy()
+
+                converted_prediction = (
+                    tf.strings.reduce_join(num_to_char(decoder)).numpy().decode("utf-8").strip()
+                )
+
+            st.success("Done")
+            st.markdown("#### Decoded text")
+            st.code(converted_prediction if converted_prediction else "(empty)", language="text")
+
+            if show_debug:
+                st.markdown("#### Raw tokens (debug)")
+                st.code(str(decoder), language="text")
+        else:
+            st.info("Ready when you are.")
         
