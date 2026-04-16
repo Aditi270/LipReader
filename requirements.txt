@@ -1,7 +1,14 @@
-streamlit>=1.50.0
-tensorflow>=2.21.0
-tf-keras>=2.21.0
-opencv-python-headless>=4.10.0.84
-imageio>=2.34.0
+streamlit==1.50.0
+
+# TensorFlow 2.21 + legacy checkpoint loading via tf-keras.
+tensorflow==2.21.0
+tf-keras==2.21.0
+
+# Streamlit requires protobuf < 7; TF requires protobuf >= 6.31.1.
+protobuf>=6.31.1,<7
+
+# Runtime deps
+opencv-python-headless==4.12.0.88
+imageio==2.37.0
 pillow>=10.0.0
-gdown>=6.0.0
+gdown==6.0.0
