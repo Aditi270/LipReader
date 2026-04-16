@@ -1,8 +1,10 @@
 streamlit==1.50.0
 
-# TensorFlow 2.21 + legacy checkpoint loading via tf-keras.
-tensorflow==2.21.0
-tf-keras==2.21.0
+# TensorFlow + legacy checkpoint loading via tf-keras.
+# Keep a compatible range so Streamlit Cloud can pick an available wheel
+# for the configured Python version (see runtime.txt).
+tensorflow>=2.16,<2.22
+tf-keras>=2.16,<2.22
 
 # Streamlit requires protobuf < 7; TF requires protobuf >= 6.31.1.
 protobuf>=6.31.1,<7
